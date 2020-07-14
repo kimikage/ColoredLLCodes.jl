@@ -1,0 +1,19 @@
+language: julia
+os:
+    - linux
+julia:
+    - 1.0
+    - 1
+    - nightly
+arch:
+    - x64
+    - arm64
+notifications:
+    email: false
+cache:
+  directories:
+    - ~/.julia/artifacts
+jobs:
+    fast_finish: true
+after_success:
+    - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'

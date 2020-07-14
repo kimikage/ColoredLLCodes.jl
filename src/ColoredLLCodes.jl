@@ -1,0 +1,3 @@
+module ColoredLLCodes
+
+end # module
