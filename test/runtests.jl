@@ -40,6 +40,18 @@ if get(ENV, "CI", "false") == "true"
     end
 end
 
+@testset "no colors" begin
+    io = IOBuffer()
+    ColoredLLCodes.print_llvm(io, "; comment")
+    @test String(take!(io)) == "; comment\n"
+
+    ColoredLLCodes.print_native(io, "; comment", :x86)
+    @test String(take!(io)) == "; comment\n"
+
+    ColoredLLCodes.print_native(io, "; comment", :unknown)
+    @test String(take!(io)) == "; comment\n"
+end
+
 function hilight_native(s, arch)
     io = IOBuffer()
     ColoredLLCodes.print_native(IOContext(io, :color=>true), s, arch)
