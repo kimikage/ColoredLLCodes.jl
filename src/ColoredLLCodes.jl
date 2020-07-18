@@ -57,8 +57,7 @@ const llvm_types =
     r"^(?:void|half|float|double|x86_\w+|ppc_\w+|label|metadata|type|opaque|token|i\d+)$"
 const llvm_cond = r"^(?:[ou]?eq|[ou]?ne|[uso][gl][te]|ord|uno|true|false)$"
 
-function print_llvm_tokens(io, line)
-    tokens = line
+function print_llvm_tokens(io, tokens)
     m = match(r"^((?:[^\s:]+:)?)(\s*)(.*)", tokens)
     if m !== nothing
         label, spaces, tokens = m.captures
@@ -185,18 +184,22 @@ print_native_tokens(io, line, ::Val) = print(io, line)
 
 const x86_ptr = r"^(?:(?:[xyz]mm|[dq])?word|byte|ptr|offset)$"
 const avx512flags = r"^(?:z|r[nduz]-sae|sae|1to1?\d)$"
+const arm_cond = r"^(?:eq|ne|cs|ho|cc|lo|mi|pl|vs|vc|hi|ls|[lg][te]|al|nv)$"
+const arm_keywords = r"^(?:lsl|lsr|asr|ror|rrx|!|/[zm])$"
 
-function print_native_tokens(io, line, ::Val{:x86})
-    tokens = line
-    m = match(r"^((?:[^\s:]+:)?)(\s*)(.*)", tokens)
+function print_native_tokens(io, tokens, arch::Union{Val{:x86}, Val{:arm}})
+    x86 = arch isa Val{:x86}
+    m = match(r"^((?:[^\s:]+:|\"[^\"]+\":)?)(\s*)(.*)", tokens)
     if m !== nothing
         label, spaces, tokens = m.captures
         printstyled_ll(io, label, :label, spaces)
     end
-    m = match(r"^([a-z]\w*)(\s*)(.*)", tokens)
+    haslabel = false
+    m = match(r"^([a-z][\w.]*)(\s*)(.*)", tokens)
     if m !== nothing
         instruction, spaces, tokens = m.captures
         printstyled_ll(io, instruction, :instruction, spaces)
+        haslabel = occursin(r"^(?:bl?|bl?\.\w{2,5}|[ct]bn?z)?$", instruction)
     end
 
     isfuncname = false
@@ -214,77 +217,31 @@ function print_native_tokens(io, line, ::Val{:x86})
             printstyled_ll(io, bracket, :bracket, spaces)
             continue
         end
-
-        m = match(r"^([^\s,:*(){}\[\]]+)(\s*)(.*)", tokens)
-        m === nothing && break
-        token, spaces, tokens = m.captures
-        if occursin(num_regex, token)
-            printstyled_ll(io, token, :number)
-        elseif occursin(x86_ptr, token) || occursin(avx512flags, token)
-            printstyled_ll(io, token, :keyword)
-            isfuncname = token == "offset"
-        elseif occursin(r"^L.+$", token)
-            printstyled_ll(io, token, :label)
-        elseif occursin(r"^\$.+$", token)
-            printstyled_ll(io, token, :funcname)
-        elseif occursin(r"^%?(?:[a-z]\w+|\"[^\"]+\")$", token)
-            printstyled_ll(io, token, isfuncname ? :funcname : :variable)
-            isfuncname = false
-        else
-            printstyled_ll(io, token, :default)
-        end
-        print(io, spaces)
-    end
-end
-
-const arm_cond = r"^(?:eq|ne|cs|ho|cc|lo|mi|pl|vs|vc|hi|ls|[lg][te]|al|nv)$"
-const arm_keywords = r"^(?:lsl|lsr|asr|ror|rrx|!|/[zm])$"
-
-function print_native_tokens(io, line, ::Val{:arm})
-    tokens = line
-    m = match(r"^((?:[^\s:]+:|\"[^\"]+\":)?)(\s*)(.*)", tokens)
-    if m !== nothing
-        label, spaces, tokens = m.captures
-        printstyled_ll(io, label, :label, spaces)
-    end
-    haslabel = false
-    m = match(r"^([a-z][\w.]*)(\s*)(.*)", tokens)
-    if m !== nothing
-        instruction, spaces, tokens = m.captures
-        printstyled_ll(io, instruction, :instruction, spaces)
-        haslabel = occursin(r"^(?:bl?|bl?\.\w{2,5}|[ct]bn?z)?$", instruction)
-    end
-
-    while !isempty(tokens)
-        m = match(r"^([,])(\s*)(.*)", tokens)
-        if m !== nothing
-            sym, spaces, tokens = m.captures
-            printstyled_ll(io, sym, :default, spaces)
-            continue
-        end
-        m = match(r"^([(){}\[\]])(\s*)(.*)", tokens)
-        if m !== nothing
-            bracket, spaces, tokens = m.captures
-            printstyled_ll(io, bracket, :bracket, spaces)
-            continue
-        end
         m = match(r"^#([0-9a-fx.-]+)(\s*)(.*)", tokens)
-        if m !== nothing && occursin(num_regex, m.captures[1])
+        if !x86 && m !== nothing && occursin(num_regex, m.captures[1])
             num, spaces, tokens = m.captures
             printstyled_ll(io, "#" * num, :number, spaces)
             continue
         end
 
-        m = match(r"^([^\s,(){}\[\]][^\s,(){}\[\]/]*)(\s*)(.*)", tokens)
+        m = match(r"^([^\s,:*(){}\[\]][^\s,:*/(){}\[\]]*)(\s*)(.*)", tokens)
         m === nothing && break
         token, spaces, tokens = m.captures
         if occursin(num_regex, token)
             printstyled_ll(io, token, :number)
-        elseif occursin(arm_keywords, token) || occursin(arm_cond, token)
+        elseif x86 && occursin(x86_ptr, token) || occursin(avx512flags, token)
             printstyled_ll(io, token, :keyword)
-        elseif occursin(r"^(?:\w[\w.]*|\"[^\"]+\")$", token)
+            isfuncname = token == "offset"
+        elseif !x86 && (occursin(arm_keywords, token) || occursin(arm_cond, token))
+            printstyled_ll(io, token, :keyword)
+        elseif occursin(r"^L.+$", token)
+            printstyled_ll(io, token, :label)
+        elseif occursin(r"^\$.+$", token)
+            printstyled_ll(io, token, :funcname)
+        elseif occursin(r"^%?(?:[a-z][\w.]+|\"[^\"]+\")$", token)
             islabel = haslabel & !occursin(',', tokens)
-            printstyled_ll(io, token, islabel ? :label : :variable)
+            printstyled_ll(io, token, islabel ? :label : isfuncname ? :funcname : :variable)
+            isfuncname = false
         else
             printstyled_ll(io, token, :default)
         end
