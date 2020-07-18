@@ -55,7 +55,7 @@ end
 
 const llvm_types =
     r"^(?:void|half|float|double|x86_\w+|ppc_\w+|label|metadata|type|opaque|token|i\d+)$"
-const llvm_cond = r"^(?:[ou]?eq|[ou]?ne|[uso][gl][te]|ord|uno|true|false)$"
+const llvm_cond = r"^(?:[ou]?eq|[ou]?ne|[uso][gl][te]|ord|uno)$" # true|false
 
 function print_llvm_tokens(io, tokens)
     m = match(r"^((?:[^\s:]+:)?)(\s*)(.*)", tokens)
@@ -72,7 +72,8 @@ function print_llvm_tokens(io, tokens)
     m = match(r"^([a-z]\w*)(\s*)(.*)", tokens)
     if m !== nothing
         inst, spaces, tokens = m.captures
-        printstyled_ll(io, inst, inst == "define" ? :keyword : :instruction, spaces)
+        iskeyword = occursin(r"^(?:define|declare|type)$", inst) || occursin("=", tokens)
+        printstyled_ll(io, inst, iskeyword ? :keyword : :instruction, spaces)
     end
 
     print_llvm_operands(io, tokens)
@@ -94,10 +95,16 @@ function print_llvm_operand(io, tokens)
             printstyled_ll(io, ',', :default, spaces)
             break
         end
-        m = match(r"^(\*+)(\s*)(.*)", tokens)
+        m = match(r"^(\*+|=)(\s*)(.*)", tokens)
         if m !== nothing
-            asterisks, spaces, tokens = m.captures
-            printstyled_ll(io, asterisks, :default, spaces)
+            sym, spaces, tokens = m.captures
+            printstyled_ll(io, sym, :default, spaces)
+            continue
+        end
+        m = match(r"^(\"[^\"]*\")(\s*)(.*)", tokens)
+        if m !== nothing
+            str, spaces, tokens = m.captures
+            printstyled_ll(io, str, :variable, spaces)
             continue
         end
         m = match(r"^([({\[<])(\s*)(.*)", tokens)
@@ -114,7 +121,7 @@ function print_llvm_operand(io, tokens)
             break # leave
         end
 
-        m = match(r"^([^\s,*(){}\[\]<>]+)(\s*)(.*)", tokens)
+        m = match(r"^([^\s,*=(){}\[\]<>]+)(\s*)(.*)", tokens)
         m === nothing && break
         token, spaces, tokens = m.captures
         if occursin(llvm_types, token)
@@ -127,6 +134,7 @@ function print_llvm_operand(io, tokens)
         elseif occursin(r"^@.+$", token)
             printstyled_ll(io, token, :funcname)
         elseif occursin(r"^%.+$", token)
+            islabel |= occursin(r"^%[^\d].*$", token) & occursin(r"^\]", tokens)
             printstyled_ll(io, token, islabel ? :label : :variable)
             islabel = false
         elseif occursin(r"^[a-z]\w+$", token)
