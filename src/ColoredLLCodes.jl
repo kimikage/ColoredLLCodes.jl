@@ -20,7 +20,7 @@ llstyle = Dict{Symbol, Tuple{Bool, Union{Symbol, Int}}}(
 const num_regex = r"^(?:\$?-?\d+|0x[0-9A-Fa-f]+|-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)$"
 
 function printstyled_ll(io::IO, x, s::Symbol, trailing_spaces="")
-    isempty(x) || printstyled(io, x, bold=llstyle[s][1], color=llstyle[s][2])
+    printstyled(io, x, bold=llstyle[s][1], color=llstyle[s][2])
     print(io, trailing_spaces)
 end
 
@@ -183,6 +183,9 @@ end
 
 print_native_tokens(io, line, ::Val) = print(io, line)
 
+const x86_ptr = r"^(?:(?:[xyz]mm|[dq])?word|byte|ptr|offset)$"
+const avx512flags = r"^(?:z|r[nduz]-sae|sae|1to1?\d)$"
+
 function print_native_tokens(io, line, ::Val{:x86})
     tokens = line
     m = match(r"^((?:[^\s:]+:)?)(\s*)(.*)", tokens)
@@ -217,7 +220,7 @@ function print_native_tokens(io, line, ::Val{:x86})
         token, spaces, tokens = m.captures
         if occursin(num_regex, token)
             printstyled_ll(io, token, :number)
-        elseif occursin(r"(?:[dq]?word|byte|ptr|offset)", token)
+        elseif occursin(x86_ptr, token) || occursin(avx512flags, token)
             printstyled_ll(io, token, :keyword)
             isfuncname = token == "offset"
         elseif occursin(r"^L.+$", token)
@@ -235,6 +238,8 @@ function print_native_tokens(io, line, ::Val{:x86})
 end
 
 const arm_cond = r"^(?:eq|ne|cs|ho|cc|lo|mi|pl|vs|vc|hi|ls|[lg][te]|al|nv)$"
+const arm_keywords = r"^(?:lsl|lsr|asr|ror|rrx|!|/[zm])$"
+
 function print_native_tokens(io, line, ::Val{:arm})
     tokens = line
     m = match(r"^((?:[^\s:]+:|\"[^\"]+\":)?)(\s*)(.*)", tokens)
@@ -247,7 +252,7 @@ function print_native_tokens(io, line, ::Val{:arm})
     if m !== nothing
         instruction, spaces, tokens = m.captures
         printstyled_ll(io, instruction, :instruction, spaces)
-        haslabel = occursin(r"^(?:bl?|bl?\.\w\w|[ct]bn?z)?$", instruction)
+        haslabel = occursin(r"^(?:bl?|bl?\.\w{2,5}|[ct]bn?z)?$", instruction)
     end
 
     while !isempty(tokens)
@@ -270,14 +275,14 @@ function print_native_tokens(io, line, ::Val{:arm})
             continue
         end
 
-        m = match(r"^([^\s,(){}\[\]]+)(\s*)(.*)", tokens)
+        m = match(r"^([^\s,(){}\[\]][^\s,(){}\[\]/]*)(\s*)(.*)", tokens)
         m === nothing && break
         token, spaces, tokens = m.captures
-        if occursin(r"^(?:lsl|lsr|asr|!)$", token)
+        if occursin(num_regex, token)
+            printstyled_ll(io, token, :number)
+        elseif occursin(arm_keywords, token) || occursin(arm_cond, token)
             printstyled_ll(io, token, :keyword)
-        elseif occursin(arm_cond, token)
-            printstyled_ll(io, token, :keyword)
-        elseif occursin(r"^(?:[\w.]+|\"[^\"]+\")$", token)
+        elseif occursin(r"^(?:\w[\w.]*|\"[^\"]+\")$", token)
             islabel = haslabel & !occursin(',', tokens)
             printstyled_ll(io, token, islabel ? :label : :variable)
         else
