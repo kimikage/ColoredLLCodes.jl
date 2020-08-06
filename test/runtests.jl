@@ -42,8 +42,14 @@ end
 
 @testset "no colors" begin
     io = IOBuffer()
+    code_llvm(io, sqrt, (Float32,))
+    @test !occursin("\e", String(take!(io)))
+
     ColoredLLCodes.print_llvm(io, "; comment")
     @test String(take!(io)) == "; comment\n"
+
+    code_native(io, sqrt, (Float32,))
+    @test !occursin("\e", String(take!(io)))
 
     ColoredLLCodes.print_native(io, "; comment", :x86)
     @test String(take!(io)) == "; comment\n"
@@ -52,6 +58,15 @@ end
     @test String(take!(io)) == "; comment\n"
 end
 
+function hilight_llvm(s)
+    io = IOBuffer()
+    ColoredLLCodes.print_llvm(IOContext(io, :color=>true), s)
+    r = String(take!(io))
+    println(stdout, " input: ", s)
+    println(stdout, "result: ", r)
+    flush(stdout)
+    r
+end
 function hilight_native(s, arch)
     io = IOBuffer()
     ColoredLLCodes.print_native(IOContext(io, :color=>true), s, arch)
@@ -83,12 +98,174 @@ const F, XF = esc_code(:funcname)
 
 const COM = D * "," * XD
 const COL = D * ":" * XD
+const EQU = D * "=" * XD
 const P = B * "(" * XB
 const XP = B * ")" * XB
 const S = B * "[" * XB
 const XS = B * "]" * XB
 const U = B * "{" * XB
 const XU = B * "}" * XB
+
+@testset "LLVM IR" begin
+    @testset "comment" begin
+        @test hilight_llvm("; comment ; // # ") == "$(C); comment ; // # $(XC)\n"
+    end
+    @testset "lavel" begin
+        @test hilight_llvm("top:") == "$(L)top:$(XL)\n"
+
+        @test hilight_llvm("L7:\t\t; preds = %top") ==
+            "$(L)L7:$(XL)\t\t$(C); preds = %top$(XC)\n"
+    end
+    @testset "define" begin
+        @test hilight_llvm("define double @julia_func_1234(float) {") ==
+            "$(K)define$(XK) $(T)double$(XT) " *
+            "$(F)@julia_func_1234$(XF)$P$(T)float$(XT)$XP $U\n"
+
+        @test hilight_llvm("}") == "$XU\n"
+    end
+
+    @testset "declare" begin
+        @test hilight_llvm("declare i32 @jl_setjmp(i8*) #2") ==
+            "$(K)declare$(XK) $(T)i32$(XT) " *
+            "$(F)@jl_setjmp$(XF)$P$(T)i8$(XT)$(D)*$(XD)$XP $(D)#2$(XD)\n"
+    end
+
+    @testset "type" begin
+        @test hilight_llvm("%jl_value_t = type opaque") ==
+            "$(V)%jl_value_t$(XV) $EQU $(K)type$(XK) $(T)opaque$(XT)\n"
+    end
+
+    @testset "target" begin
+        datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128-ni:10:11:12:13"
+        @test hilight_llvm("target datalayout = \"$datalayout\"") ==
+            "$(K)target$(XK) $(K)datalayout$(XK) $EQU $(V)\"$datalayout\"$(XV)\n"
+    end
+
+    @testset "attributes" begin
+        @test hilight_llvm(
+            """attributes #1 = { uwtable "frame-pointer"="all" "thunk" }""") ==
+            "$(K)attributes$(XK) $(D)#1$(XD) $EQU " *
+            "$U $(K)uwtable$(XK) $(V)\"frame-pointer\"$(XV)$EQU" *
+            "$(V)\"all\"$(XV) $(V)\"thunk\"$(XV) $XU\n"
+    end
+
+    @testset "terminator" begin
+        @test hilight_llvm("  ret i8 %12") ==
+            "  $(I)ret$(XI) $(T)i8$(XT) $(V)%12$(XV)\n"
+
+        @test hilight_llvm("  br i1 %2, label %L6, label %L4") ==
+            "  $(I)br$(XI) $(T)i1$(XT) $(V)%2$(XV)$COM " *
+            "$(T)label$(XT) $(L)%L6$(XL)$COM $(T)label$(XT) $(L)%L4$(XL)\n"
+
+        @test hilight_llvm("  br label %L5") ==
+            "  $(I)br$(XI) $(T)label$(XT) $(L)%L5$(XL)\n"
+
+        @test hilight_llvm("  unreachable") == "  $(I)unreachable$(XI)\n"
+    end
+
+    @testset "arithmetic" begin
+        @test hilight_llvm("   %11 = add nuw nsw i64 %value_phi10, 1") ==
+            "   $(V)%11$(XV) $EQU $(I)add$(XI) $(K)nuw$(XK) $(K)nsw$(XK) " *
+            "$(T)i64$(XT) $(V)%value_phi10$(XV)$COM $(N)1$(XN)\n"
+
+        @test hilight_llvm("   %13 = fadd double %12, -2.000000e+00") ==
+            "   $(V)%13$(XV) $EQU $(I)fadd$(XI) " *
+            "$(T)double$(XT) $(V)%12$(XV)$COM $(N)-2.000000e+00$(XN)\n"
+
+        @test hilight_llvm("      %21 = fmul contract double %20, 0x0123456789ABCDEF") ==
+            "      $(V)%21$(XV) $EQU $(I)fmul$(XI) $(K)contract$(XK) " *
+            "$(T)double$(XT) $(V)%20$(XV)$COM $(N)0x0123456789ABCDEF$(XN)\n"
+    end
+
+    @testset "bitwise" begin
+        @test hilight_llvm("   %31 = shl i64 %value_phi4, 52") ==
+            "   $(V)%31$(XV) $EQU " *
+            "$(I)shl$(XI) $(T)i64$(XT) $(V)%value_phi4$(XV)$COM $(N)52$(XN)\n"
+    end
+
+    @testset "aggregate" begin
+        @test hilight_llvm("    %4 = extractvalue { i64, i1 } %1, 0") ==
+            "    $(V)%4$(XV) $EQU $(I)extractvalue$(XI) " *
+            "$U $(T)i64$(XT)$COM $(T)i1$(XT) $XU $(V)%1$(XV)$COM $(N)0$(XN)\n"
+    end
+
+    @testset "memory access" begin
+        @test hilight_llvm("  %dims = alloca [1 x i64], align 8") ==
+            "  $(V)%dims$(XV) $EQU $(I)alloca$(XI) " *
+            "$S$(N)1$(XN) $(D)x$(XD) $(T)i64$(XT)$XS$COM $(K)align$(XK) $(N)8$(XN)\n"
+
+        @test hilight_llvm("    %51 = load i32," *
+                           " i32* inttoptr (i64 226995504 to i32*), align 16") ==
+            "    $(V)%51$(XV) $EQU $(I)load$(XI) $(T)i32$(XT)$COM " *
+            "$(T)i32$(XT)$(D)*$(XD) $(K)inttoptr$(XK) $P$(T)i64$(XT) $(N)226995504$(XN) " *
+            "$(K)to$(XK) $(T)i32$(XT)$(D)*$(XD)$XP$COM $(K)align$(XK) $(N)16$(XN)\n"
+
+        @test hilight_llvm("    %53 = load %jl_value_t addrspace(10)*, " *
+                           "%jl_value_t addrspace(10)* addrspace(11)* %52, align 8") ==
+            "    $(V)%53$(XV) $EQU $(I)load$(XI) $(V)%jl_value_t$(XV) " *
+            "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD)$COM " *
+            "$(V)%jl_value_t$(XV) $(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD) " *
+            "$(K)addrspace$(XK)$P$(N)11$(XN)$XP$(D)*$(XD) " *
+            "$(V)%52$(XV)$COM $(K)align$(XK) $(N)8$(XN)\n"
+
+        @test hilight_llvm("    store i64 %61, i64 addrspace(11)* %60, align 8") ==
+            "    $(I)store$(XI) $(T)i64$(XT) $(V)%61$(XV)$COM " *
+            "$(T)i64$(XT) $(K)addrspace$(XK)$P$(N)11$(XN)$XP$(D)*$(XD) " *
+            "$(V)%60$(XV)$COM $(K)align$(XK) $(N)8$(XN)\n"
+
+        @test hilight_llvm("  store volatile %jl_value_t addrspace(10)** %62, " *
+                           "%jl_value_t addrspace(10)*** %63, align 8") ==
+            "  $(I)store$(XI) $(K)volatile$(XK) $(V)%jl_value_t$(XV) " *
+            "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)**$(XD) $(V)%62$(XV)$COM " *
+            "$(V)%jl_value_t$(XV) $(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)***$(XD) " *
+            "$(V)%63$(XV)$COM $(K)align$(XK) $(N)8$(XN)\n"
+
+        @test hilight_llvm("     %71 = getelementptr i8, i8* %70, i64 8") ==
+            "     $(V)%71$(XV) $EQU $(I)getelementptr$(XI) $(T)i8$(XT)$COM " *
+            "$(T)i8$(XT)$(D)*$(XD) $(V)%70$(XV)$COM $(T)i64$(XT) $(N)8$(XN)\n"
+    end
+
+    @testset "conversion" begin
+        @test hilight_llvm("  %22 = zext i1 %21 to i8") ==
+            "  $(V)%22$(XV) $EQU $(I)zext$(XI) $(T)i1$(XT) $(V)%21$(XV) " *
+            "$(K)to$(XK) $(T)i8$(XT)\n"
+
+        @test hilight_llvm("     %24 = sitofp i64 %23 to double") ==
+            "     $(V)%24$(XV) $EQU $(I)sitofp$(XI) $(T)i64$(XT) $(V)%23$(XV) " *
+            "$(K)to$(XK) $(T)double$(XT)\n"
+
+        @test hilight_llvm("  %26 = ptrtoint i8* %25 to i64") ==
+            "  $(V)%26$(XV) $EQU $(I)ptrtoint$(XI) $(T)i8$(XT)$(D)*$(XD) " *
+            "$(V)%25$(XV) $(K)to$(XK) $(T)i64$(XT)\n"
+
+        @test hilight_llvm("  %28 = bitcast %jl_value_t addrspace(10)* %27 " *
+                           "to [2 x i16] addrspace(10)*") ==
+            "  $(V)%28$(XV) $EQU $(I)bitcast$(XI) $(V)%jl_value_t$(XV) " *
+            "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD) $(V)%27$(XV) " *
+            "$(K)to$(XK) $S$(N)2$(XN) $(D)x$(XD) $(T)i16$(XD)$XS " *
+            "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD)\n"
+    end
+
+    @testset "other" begin
+        @test hilight_llvm("  %31 = icmp slt i64 %30, 0") ==
+            "  $(V)%31$(XV) $EQU $(I)icmp$(XI) $(I)slt$(XI) " *
+            "$(T)i64$(XT) $(V)%30$(XV)$COM $(N)0$(XN)\n"
+
+        @test hilight_llvm("  %value_phi34 = phi double [ %33, %L50 ], [ %32, %L60 ]") ==
+            "  $(V)%value_phi34$(XV) $EQU $(I)phi$(XI) $(T)double$(XT) " *
+            "$S $(V)%33$(XV)$COM $(L)%L50$(XL) $XS$COM " *
+            "$S $(V)%32$(XV)$COM $(L)%L60$(XL) $XS\n"
+
+        @test hilight_llvm("   %.v = select i1 %35, i64 %36, i64 63") ==
+            "   $(V)%.v$(XV) $EQU $(I)select$(XI) $(T)i1$(XT) $(V)%35$(XV)$COM " *
+            "$(T)i64$(XT) $(V)%36$(XV)$COM $(T)i64$(XT) $(N)63$(XN)\n"
+
+        @test hilight_llvm("   %38 = call i64 @llvm.cttz.i64(i64 %37, i1 false)") ==
+            "   $(V)%38$(XV) $EQU $(I)call$(XI) $(T)i64$(XT) " *
+            "$(F)@llvm.cttz.i64$(XF)$P$(T)i64$(XT) $(V)%37$(XV)$COM " *
+            "$(T)i1$(XT) $(K)false$(XK)$XP\n"
+    end
+end
 
 @testset "x86 ASM" begin
     @testset "comment" begin
