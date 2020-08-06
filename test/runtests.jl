@@ -48,6 +48,13 @@ end
     ColoredLLCodes.print_llvm(io, "; comment")
     @test String(take!(io)) == "; comment\n"
 
+    ColoredLLCodes.highlighting[:llvm] = false
+    code_llvm(IOContext(io, :color => true), abs, (Float64,))
+    @test !occursin("\e", String(take!(io)))
+    ColoredLLCodes.highlighting[:llvm] = true
+    code_llvm(IOContext(io, :color => true), abs, (Float64,))
+    @test occursin("\e", String(take!(io)))
+
     code_native(io, sqrt, (Float32,))
     @test !occursin("\e", String(take!(io)))
 
@@ -56,6 +63,13 @@ end
 
     ColoredLLCodes.print_native(io, "; comment", :unknown)
     @test String(take!(io)) == "; comment\n"
+
+    ColoredLLCodes.highlighting[:native] = false
+    code_native(IOContext(io, :color => true), abs, (Float64,))
+    @test !occursin("\e", String(take!(io)))
+    ColoredLLCodes.highlighting[:native] = true
+    code_native(IOContext(io, :color => true), abs, (Float64,))
+    @test occursin("\e", String(take!(io)))
 end
 
 function hilight_llvm(s)

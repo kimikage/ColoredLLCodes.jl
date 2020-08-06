@@ -4,15 +4,20 @@ import InteractiveUtils: _dump_function, code_llvm, code_native
 
 const IO_ = Union{Base.AbstractPipe, Base.LibuvStream} # avoid overwriting
 
+highlighting = Dict{Symbol, Bool}(
+    :llvm => true,
+    :native => true,
+)
+
 llstyle = Dict{Symbol, Tuple{Bool, Union{Symbol, Int}}}(
-    :default     => (false, :light_black),
+    :default     => (false, :light_black), # e.g. comma, equal sign, unknown token
     :comment     => (false, :green),
     :label       => (false, :light_red),
     :instruction => ( true, :light_cyan),
     :type        => (false, :cyan),
     :number      => (false, :yellow),
     :bracket     => (false, :yellow),
-    :variable    => (false, :normal),
+    :variable    => (false, :normal), # e.g. variable, register
     :keyword     => (false, :light_magenta),
     :funcname    => (false, :light_yellow),
 )
@@ -33,7 +38,7 @@ function code_llvm(io::IO_, @nospecialize(f), @nospecialize(types),
     else
         d = _dump_function(f, types, false, false, !raw, dump_module, :att, optimize)
     end
-    if get(io, :color, false)
+    if highlighting[:llvm] && get(io, :color, false)
         print_llvm(io, d)
     else
         print(io, d)
@@ -157,7 +162,7 @@ function code_native(io::IO_, @nospecialize(f), @nospecialize(types=Tuple);
     else
         d = _dump_function(f, types, true, false, false, false, syntax, true)
     end
-    if get(io, :color, false)
+    if highlighting[:native] && get(io, :color, false)
         print_native(io, d)
     else
         print(io, d)
