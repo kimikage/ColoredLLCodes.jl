@@ -1,26 +1,35 @@
 module ColoredLLCodes
 
+using InteractiveUtils
 import InteractiveUtils: _dump_function, code_llvm, code_native
 
 const IO_ = Union{Base.AbstractPipe, Base.LibuvStream} # avoid overwriting
 
-highlighting = Dict{Symbol, Bool}(
-    :llvm => true,
-    :native => true,
-)
+if VERSION > v"1.5" && :highlighting in names(InteractiveUtils, all=true)
+    global highlighting = InteractiveUtils.highlighting
+else
+    global highlighting = Dict{Symbol, Bool}(
+        :llvm => true,
+        :native => true,
+    )
+end
 
-llstyle = Dict{Symbol, Tuple{Bool, Union{Symbol, Int}}}(
-    :default     => (false, :light_black), # e.g. comma, equal sign, unknown token
-    :comment     => (false, :green),
-    :label       => (false, :light_red),
-    :instruction => ( true, :light_cyan),
-    :type        => (false, :cyan),
-    :number      => (false, :yellow),
-    :bracket     => (false, :yellow),
-    :variable    => (false, :normal), # e.g. variable, register
-    :keyword     => (false, :light_magenta),
-    :funcname    => (false, :light_yellow),
-)
+if VERSION > v"1.5" && :llstyle in names(InteractiveUtils, all=true)
+    global llstyle = InteractiveUtils.llstyle
+else
+    global llstyle = Dict{Symbol, Tuple{Bool, Union{Symbol, Int}}}(
+        :default     => (false, :normal), # e.g. comma, equal sign, unknown token
+        :comment     => (false, :light_black),
+        :label       => (false, :light_red),
+        :instruction => ( true, :light_cyan),
+        :type        => (false, :cyan),
+        :number      => (false, :yellow),
+        :bracket     => (false, :yellow),
+        :variable    => (false, :normal), # e.g. variable, register
+        :keyword     => (false, :light_magenta),
+        :funcname    => (false, :light_yellow),
+    )
+end
 
 const num_regex = r"^(?:\$?-?\d+|0x[0-9A-Fa-f]+|-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)$"
 

@@ -6,8 +6,11 @@ Base.get(::Base.PipeEndpoint, key::Symbol, default) = key === :color ? true : de
 @show Sys.ARCH
 ccall(:jl_dump_host_cpu, Cvoid, ())
 
+ColoredLLCodes.llstyle[:default] = (true, :normal)
+
 if get(ENV, "TRAVIS", "false") == "true"
     # avoid the `light` colors
+    ColoredLLCodes.llstyle[:comment] = (false, :green)
     ColoredLLCodes.llstyle[:label] = (false, :red)
     ColoredLLCodes.llstyle[:instruction] = (true, :blue)
     ColoredLLCodes.llstyle[:keyword] = (false, :magenta)
@@ -256,7 +259,7 @@ const XU = B * "}" * XB
                            "to [2 x i16] addrspace(10)*") ==
             "  $(V)%28$(XV) $EQU $(I)bitcast$(XI) $(V)%jl_value_t$(XV) " *
             "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD) $(V)%27$(XV) " *
-            "$(K)to$(XK) $S$(N)2$(XN) $(D)x$(XD) $(T)i16$(XD)$XS " *
+            "$(K)to$(XK) $S$(N)2$(XN) $(D)x$(XD) $(T)i16$(XT)$XS " *
             "$(K)addrspace$(XK)$P$(N)10$(XN)$XP$(D)*$(XD)\n"
     end
 

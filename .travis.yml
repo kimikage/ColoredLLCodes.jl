@@ -6,7 +6,6 @@ julia:
     - 1
     - nightly
 arch:
-    - x64
     - arm64
 notifications:
     email: false

@@ -1,6 +1,6 @@
 name = "ColoredLLCodes"
 uuid = "15eaffa3-7f74-46bc-af11-fdd2893a4aba"
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
