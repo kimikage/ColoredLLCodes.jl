@@ -1,3 +1,8 @@
+if VERSION >= v"1.7"
+    @warn("Julia v1.7 or later is no longer supported.")
+    exit(0)
+end
+
 using InteractiveUtils, ColoredLLCodes, Test
 
 # force ":color=>true"

@@ -1,11 +1,10 @@
 # ColoredLLCodes
-[![Build Status][action-img]][action-url]
-[![Build Status][pkgeval-img]][pkgeval-url]
-[![coverage][codecov-img]][codecov-url]
-
+**End of Support**
 The feature of this package has been incorporated into `InteractiveUtils`
-of Julia v1.6. You can use this package to enable syntax highlighting of
-`code_llvm` and `code_native`, even on Julia v1.5 or earlier.
+of Julia v1.6.
+
+You can still use this package to enable syntax highlighting of
+`code_llvm` and `code_native` on Julia v1.5 or earlier.
 
 ## Screenshots
 ![code_llvm in Windows Terminal](images/terminal_llvm.png)
@@ -53,12 +52,3 @@ ColoredLLCodes.llstyle[:variable]    = (false, :normal)
 ColoredLLCodes.llstyle[:keyword]     = (false, :light_magenta)
 ColoredLLCodes.llstyle[:funcname]    = (false, :light_yellow)
 ```
-
-[action-img]: https://github.com/kimikage/ColoredLLCodes.jl/workflows/CI/badge.svg
-[action-url]: https://github.com/kimikage/ColoredLLCodes.jl/actions
-
-[pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/C/ColoredLLCodes.svg
-[pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html
-
-[codecov-img]: https://codecov.io/gh/kimikage/ColoredLLCodes.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/kimikage/ColoredLLCodes.jl
