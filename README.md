@@ -1,5 +1,6 @@
 # ColoredLLCodes
 **End of Support**
+
 The feature of this package has been incorporated into `InteractiveUtils`
 of Julia v1.6.
 
